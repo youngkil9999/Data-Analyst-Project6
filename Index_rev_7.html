@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+.axis--x path {
+  display: none;
+}
+
+.line {
+  /*fill: none;*/
+  stroke: steelblue;
+  stroke-width: 0.5px;
+}
+
+.model {
+  fill: none;
+  stroke: #aaa;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-width: 1.5px;
+}
+
+.carmodel path {
+  fill: none;
+  pointer-events: all;
+}
+
+.model--hover {
+  stroke: #000;
+}
+
+.focus text {
+  text-anchor: middle;
+  text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff;
+}
+
+.cars {
+  fill: none;
+  stroke: #aaa;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  stroke-width: 1.5px;
+}
+
+
+div.tooltip { 
+    position: absolute;     
+    text-align: center;     
+    width: 100px;          
+    height: 80px;         
+    padding: 2px;       
+    font: 12px sans-serif;    
+    background: lightsteelblue; 
+    border: 0px;    
+    border-radius: 8px;     
+    pointer-events: none; 
+}
+
+/*.tooltip-inner {
+    white-space: pre-wrap;
+}*/
+
+
+form {
+  right: 10px;
+  top: 10px;
+}
+
+</style>
+
+
+<head>
+
+<title> US, CANADA Acura Sales 2010 - 2016</title>
+
+<p class="title"><h1> US, CANADA Acura Models Sales 2010 - 2016 </h1></p> 
+
+<h3> 
+Let's look at Acura brand in US, CA. Exploring the Acura Sales in each country to know differences between US and CA. How each model sales change from 2010 to 2016. How the brand, Acura model changed time to time in each country. 
+By analyzing the Bar and line charts could present how the Sales trend changed and which model was popular in the both countries.
+It could be easy to figure out the Acura brand differences or even estimated market size between US and Canada </h3>
+
+</head>
+
+<body>
+
+<!-- Added button for selecting chart types and sales region N.A meant North America. -->
+<form>
+  <label><input type="radio" name="mode" value="line"> Line </label>
+  <label><input type="radio" name="mode" value="stacked" checked> Stacked Bar </label>
+</form>
+
+<form>
+  <label><input type="radio" name="country" value="NA" checked> N.A </label>
+  <label><input type="radio" name="country" value="US" checked> U.S </label>
+  <label><input type="radio" name="country" value="CA" checked> CANADA </label>
+</form>
+
+
+<svg width="1300" height="550"></svg>
+<script src="//d3js.org/d3.v4.min.js"></script>
+<script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+<script>
+
+
+var svg = d3.select("svg"),
+    margin = {top: 20, right: 250, bottom: 20, left: 80},
+    width = svg.attr("width") - margin.left - margin.right,
+    height = svg.attr("height") - margin.top - margin.bottom,
+    g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+var parseTime = d3.timeParse("%m/%d/%y"),
+    bisectDate = d3.bisector(function(d) { return d.date; }).left;
+
+var x = d3.scaleTime().range([0, width]),
+    y = d3.scaleLinear().range([height, 0]),
+    z = d3.scaleOrdinal(d3.schemeCategory20);
+
+var stack = d3.stack();
+
+var line = d3.line()
+    // .curve(d3.curveBasis)
+    .x(function(d) {return x(d.Date); })
+    .y(function(d) {return y(d.Model); });
+
+var area = d3.area()
+    .x(function(d) { return x(d.Date); })
+    .y0(function(d) {return y(d.Model[0]); })
+    .y1(function(d) { return y(d.Model[1]); });
+
+
+var div = d3.select("body").append("div") 
+    .attr("class", "tooltip")       
+    .style("opacity", 0);
+
+
+
+
+// Load data set, which includes Acura models data set since 2010 to 2016
+
+d3.tsv("DF_CSV2.tsv", type, function(error, data) {
+  if (error) throw error;
+
+// Reorganize the data set, easy to read later
+  var Models = data.columns.slice(1).map(function(id) {
+    return {
+      id: id,
+      // id = column name
+      region: id.split(" ")[2],
+      brand: id.split(" ")[0],
+      modelName: id.split(" ")[1],
+      values: data.map(function(d) {
+      // values = index name
+        return {Date: d.Date, Model: d[id]};
+      // Date = index name, Model = column data value
+      })
+    }
+  });
+
+  var yLineMax = d3.max(Models, function(c) { return d3.max(c.values, function(d) { return d.Model; }); }),
+      yStackMax = d3.max(data, function(d) { return d.total; });
+
+  x.domain(d3.extent(data, function(d) { return d.Date; }));
+  // transfer range fit in domain
+  y.domain([0, yLineMax]);
+
+  z.domain(Models.map(function(c) { return c.id; }));
+  //  Models = each model name
+  var xAxis = g.append("g")
+      .attr("class", "axis axis--x")
+      .attr("transform", "translate(0," + height + ")")
+      .call(d3.axisBottom(x));
+
+  var yAxis = g.append("g")
+      .attr("class", "axis axis--y")
+      .call(d3.axisLeft(y));
+    
+  var legend = svg.selectAll(".legend")
+    .data(data.columns.slice(1))
+    .enter().append("g")
+      .attr("class", "legend")
+      .attr("transform", function(d, i) { return "translate(0," + i * 20 + ")"; })
+      .style("font", "12px sans-serif");
+
+  legend.append("rect")
+      .attr("x", width + 240)
+      .attr("width", 10)
+      .attr("height", 10)
+      .attr("fill", z);
+
+  legend.append("text")
+      .attr("x", width + 230)
+      .attr("y", 5)
+      .attr("dy", ".35em")
+      .attr("text-anchor", "end")
+      .text(function(d) { return d; });
+
+// input button change event. whenver input button clicked, loaded each function which update the chart along with dataset.
+  d3.selectAll('input[name="mode"]').on("change", change);
+  d3.selectAll('input[name="country"]').on("change", changeRegion);
+  
+  
+
+  function init() {
+    cdata = data.columns.slice(1)
+
+    d3.select("input[value=\"line\"]").property("checked", true);
+    d3.select("input[value=\"NA\"]").property("checked", true);
+    transitionLined();
+  }
+
+  init();
+
+
+// change function update the chart type when chart type button clicked
+  function change() {
+    cdata = data.columns.slice(1)
+
+    if (this.value === "line" ) {transitionLined();
+    } else if (this.value === "stacked") {transitionStacked();
+    }
+  }
+
+// changeRegion function update the region (US, CANADA, North America) when the button clicked
+  function changeRegion() {
+
+// cvalue is the chart type (line type or bar type)
+    cvalue = d3.select('input[name="mode"]:checked').node().value
+
+    if (this.value === "NA") {
+      cdata = data.columns.slice(1)
+      if (cvalue === "line") {
+        transitionLined();  
+        } else {
+        transitionStacked();
+        }
+        
+    } 
+    else if (this.value === "US") {
+      cdata = data.columns.slice(1)
+      cdata = cdata.filter(function(d) {if (d.split(" ")[2] === "U.S.") {return d;} })
+
+      if (cvalue === "line") {
+          transitionLined();  
+        } else {
+          transitionStacked();
+        }
+    }
+    else if (this.value === "CA") {
+      cdata = data.columns.slice(1)
+      cdata = cdata.filter(function(d) {if (d.split(" ")[2] === "Canadian") {return d;} })
+
+      if (cvalue === "line") {
+        transitionLined();  
+        } else {
+        transitionStacked();
+        }
+    }
+  }
+
+
+// Update the line chart when the button clicked for region or chart type
+  function transitionLined(){
+
+    Models = cdata.map(function(id) {
+            return {
+              id: id,
+              // id = column name
+              region: id.split(" ")[2],
+              brand: id.split(" ")[0],
+              modelName: id.split(" ")[1],
+              values: data.map(function(d) {
+              // values = index name
+                return {Date: d.Date, Model: d[id]};
+              // Date = index name, Model = column data value
+              })
+            }
+          })
+
+
+    d3.selectAll(".model").remove()
+    d3.selectAll(".serie").remove()
+
+    var layer = g.append("g")
+          .attr("class", "model");
+
+    var path = layer.selectAll("path")
+      .data(Models)
+      .enter().append("path")
+        .attr("d", function(d) { d.line = this; return line(d.values); })
+        .style("stroke", function(d) {return z(d.id); });
+
+    path.on("mouseover", function(d) {    
+            div.transition()    
+                .duration(200)    
+                .style("opacity", 1);
+
+            var x0 = x.invert(d3.mouse(this)[0]);
+            // debugger;
+            for (var dt in d.values) {
+
+              var dateComp = d.values[dt].Date.getUTCFullYear().toString() + d.values[dt].Date.getUTCMonth().toString();
+              var x0date = x0.getUTCFullYear().toString() + x0.getUTCMonth().toString();
+
+              if (dateComp === x0date) {
+                var dValue = d.values[dt].Model;
+                var dDate = x0;
+              }
+            }
+
+            div.html("Model : " + d.modelName + ", Sales : " + dValue + "EA" + ", Date : " + x0)
+                .style("left", (d3.event.pageX) + "px")    
+                .style("top", (d3.event.pageY) -28 +"px");
+            })          
+        .on("mouseout", function(d) {   
+            div.transition()    
+                .duration(500)    
+                .style("opacity", 0);
+
+      });
+
+    d3.selectAll(".serie").remove();
+
+    yLineMax = d3.max(Models, function(c) { return d3.max(c.values, function(d) { return d.Model; }); })
+
+    y.domain([0, yLineMax]);
+
+    yAxis.transition()
+        .duration(500)
+        .delay(100)
+        .attr("class", "axis axis--y")
+        .call(d3.axisLeft(y));
+
+    yAxis.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("y", 6)
+        .attr("dy", "0.71em")
+        .attr("fill", "#000")
+        .text("Sales[EA]");
+
+    path.transition()
+        .duration(500)
+        .delay(function(d,i) {return i*10})
+        .attr("d", function(d) { d.line = this; return line(d.values); })
+        .attr("opacity", 1)
+        .style("stroke", function(d) {return z(d.id); });
+  }
+
+
+// Stacked bar update
+  function transitionStacked(){
+
+
+    d3.selectAll(".model").remove()
+    d3.selectAll(".serie").remove()
+
+    var StackedModel = stack.keys(cdata)(data);
+
+    var layer_1 = g.selectAll(".serie")
+      .data(StackedModel)
+      .enter().append("g")
+        .attr("class", "serie")
+        .attr("fill", function(d) {return z(d.key);});
+        
+
+    var rect = layer_1.selectAll("rect")
+      .data(function(d) {return d;})
+      .enter().append("rect")
+        .attr("x", function(d) {return d.Date;})
+        .attr("y", function(d) {return y(d[1]);})
+        .attr("height", function(d) {return y(d[0])-y(d[1]);})
+        .attr("width", 5);
+    // debugger;
+
+    rect.on("mouseover", function(d) {    
+            div.transition()    
+                .duration(200)    
+                .style("opacity", 1)
+
+            for (var prop in d.data) {
+              if (d.data.hasOwnProperty(prop)){
+                if(d.data[prop] === d[1] - d[0])
+                  var name = prop;
+                  var number = d[1] - d[0];
+                  var propDate = d.data.Date;
+              }
+            }
+
+            div.html("Model : " + name.split(" ")[1] + ", Sales : " + number + "EA" + ", Date : " + propDate)
+                .style("left", (d3.event.pageX) + "px")    
+                .style("top", (d3.event.pageY) -28 +"px");
+          });
+
+    rect.on("mouseout", function(d) {   
+              div.transition()    
+                  .duration(500)    
+                  .style("opacity", 0); 
+          });
+
+
+    d3.select(".model").remove();
+
+    // debugger;
+    var max = 0;
+    // yStackMax = d3.max(data, function(d) { return d.total; });
+    yStackMax = d3.max(StackedModel, function(d) {
+      var temp = d3.max(d, function(d1) {
+        return d1[1];
+      });
+        if (temp > max) {
+          max = temp;
+        }
+        return max;
+    });
+
+    console.log(yStackMax)
+
+    y.domain([0, yStackMax]);
+
+    yAxis.transition()
+        .duration(500)
+        .delay(100)
+        .attr("class", "axis axis--y")
+        .call(d3.axisLeft(y));
+
+
+    rect.transition()
+        .duration(500)
+        .delay(function(d,i) {return i*10})
+        .attr("x", function(i) {return x(i.data.Date);})
+        .attr("width", 5)
+        .attr("opacity", 1)
+        .transition()
+        .attr("y", function(d) {return y(d[1]);})
+        .attr("height", function(d) {return y(d[0])-y(d[1]);});
+  
+  }
+
+});
+
+
+
+// changed the date type and collect total data for each columns
+function type(d, _, columns) {
+  d.Date = parseTime(d.Date);
+  for (var i = 1, n = columns.length, c; i < n; ++i) d[c = columns[i]] = +d[c];
+
+  for (i = 1, t = 0; i < columns.length; ++i) t += d[columns[i]] = +d[columns[i]];
+  d.total = t;
+
+  return d;
+}
+
+</script>
+
+</body>
